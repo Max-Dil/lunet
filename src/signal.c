@@ -1,4 +1,4 @@
-#include "signal.h"
+#include <signal.h>
 
 #include <lauxlib.h>
 #include <lua.h>
@@ -7,6 +7,7 @@
 #include <uv.h>
 
 #include "co.h"
+#include "lunet_signal.h"
 
 typedef struct {
   uv_signal_t handle;

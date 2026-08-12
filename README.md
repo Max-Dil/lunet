@@ -6,8 +6,6 @@ A high-performance coroutine-based networking library for LuaJIT, built on top o
 [![Language](https://img.shields.io/badge/Language-C%2BLuaJIT-green.svg)]()
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
 
-[中文文档](README-CN.md)
-
 ## Overview
 
 Lunet is a coroutine-based networking library that provides synchronous APIs with asynchronous execution. It combines the power of C, LuaJIT, and libuv to deliver high-performance I/O operations while maintaining clean, readable code.
@@ -51,12 +49,6 @@ Lunet is a coroutine-based networking library that provides synchronous APIs wit
 - `stat(path)`: Get file statistics
 - `scandir(path)`: List directory contents
 
-### MySQL Module (`lunet.mysql`)
-- `open(params)`: Open database connection
-- `close(conn)`: Close database connection
-- `query(conn, query)`: Execute SELECT query
-- `exec(conn, query)`: Execute INSERT/UPDATE/DELETE
-
 ### Signal Module (`lunet.signal`)
 - `wait(signal)`: Wait for system signal
 
@@ -67,12 +59,11 @@ Lunet is a coroutine-based networking library that provides synchronous APIs wit
 - CMake 3.10+
 - LuaJIT 2.1+
 - libuv 1.x
-- MySQL client library (for MySQL module)
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/xialeistudio/lunet.git
+git clone https://github.com/Max-Dil/lunet.git
 cd lunet
 mkdir build && cd build
 cmake ..
@@ -88,16 +79,14 @@ cmake .. \
   -DLUAJIT_INCLUDE_DIR=/path/to/luajit/include \
   -DLUAJIT_LIBRARY=/path/to/luajit/lib/libluajit-5.1.dylib \
   -DLIBUV_INCLUDE_DIR=/path/to/libuv/include \
-  -DLIBUV_LIBRARY=/path/to/libuv/lib/libuv.dylib \
-  -DMYSQL_INCLUDE_DIR=/path/to/mysql/include \
-  -DMYSQL_LIBRARY=/path/to/mysql/lib/libmysqlclient.dylib
+  -DLIBUV_LIBRARY=/path/to/libuv/lib/libuv.dylib
 ```
 
 ### macOS with Homebrew
 
 ```bash
 # Install dependencies
-brew install luajit libuv mysql
+brew install luajit libuv
 
 # Build with automatic detection
 mkdir build && cd build
@@ -109,9 +98,7 @@ cmake .. \
   -DLUAJIT_INCLUDE_DIR=/opt/homebrew/include/luajit-2.1 \
   -DLUAJIT_LIBRARY=/opt/homebrew/lib/libluajit-5.1.dylib \
   -DLIBUV_INCLUDE_DIR=/opt/homebrew/include \
-  -DLIBUV_LIBRARY=/opt/homebrew/lib/libuv.dylib \
-  -DMYSQL_INCLUDE_DIR=/opt/homebrew/Cellar/mysql@8.4/8.4.4/include \
-  -DMYSQL_LIBRARY=/opt/homebrew/Cellar/mysql@8.4/8.4.4/lib/libmysqlclient.dylib
+  -DLIBUV_LIBRARY=/opt/homebrew/lib/libuv.dylib
 ```
 
 ### Ubuntu/Debian
@@ -119,7 +106,7 @@ cmake .. \
 ```bash
 # Install dependencies
 sudo apt update
-sudo apt install build-essential cmake libluajit-5.1-dev libuv1-dev libmysqlclient-dev
+sudo apt install build-essential cmake libluajit-5.1-dev libuv1-dev
 
 # Build
 mkdir build && cd build
@@ -131,7 +118,7 @@ make
 
 ```bash
 # Install dependencies
-sudo yum install gcc gcc-c++ cmake luajit-devel libuv-devel mysql-devel
+sudo yum install gcc gcc-c++ cmake luajit-devel libuv-devel
 
 # Build
 mkdir build && cd build
@@ -147,16 +134,16 @@ make
 local lunet = require('lunet')
 local socket = require('lunet.socket')
 
--- Create server
-local listener, err = socket.listen("tcp", "127.0.0.1", 8080)
-if not listener then
-    error("Failed to listen: " .. err)
-end
-
-print("Server listening on http://127.0.0.1:8080")
-
 -- Accept connections
 lunet.spawn(function()
+    -- Create server
+    local listener, err = socket.listen("tcp", "127.0.0.1", 8080)
+    if not listener then
+        error("Failed to listen: " .. err)
+    end
+
+    print("Server listening on http://127.0.0.1:8080")
+
     while true do
         local client, err = socket.accept(listener)
         if client then
@@ -211,43 +198,6 @@ lunet.spawn(function()
 end)
 ```
 
-### Database Operations
-
-```lua
-local lunet = require('lunet')
-local mysql = require('lunet.mysql')
-
-lunet.spawn(function()
-    -- Connect to database
-    local conn, err = mysql.open({
-        host = "localhost",
-        port = 3306,
-        user = "root",
-        password = "password",
-        database = "testdb"
-    })
-    
-    if conn then
-        -- Execute query
-        local result, err = mysql.query(conn, "SELECT * FROM users")
-        if result then
-            for i, row in ipairs(result) do
-                print('User:', row.name, row.email)
-            end
-        end
-        
-        -- Execute update
-        local result, err = mysql.exec(conn, "INSERT INTO users (name, email) VALUES ('John', 'john@example.com')")
-        if result then
-            print('Affected rows:', result.affected_rows)
-            print('Last insert ID:', result.last_insert_id)
-        end
-        
-        mysql.close(conn)
-    end
-end)
-```
-
 ## Usage
 
 Run your Lua script with lunet:
@@ -263,7 +213,6 @@ Lunet includes comprehensive type definitions for IDE support. The type files ar
 - `types/lunet.lua` - Core module types
 - `types/lunet/socket.lua` - Socket module types  
 - `types/lunet/fs.lua` - Filesystem module types
-- `types/lunet/mysql.lua` - MySQL module types
 - `types/lunet/signal.lua` - Signal module types
 
 ## Performance

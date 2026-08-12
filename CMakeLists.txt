@@ -35,21 +35,6 @@ endif()
 include_directories(${LIBUV_INCLUDE_DIR})
 message(STATUS "Found libuv: ${LIBUV_LIBRARY}")
 
-# === MySQL Client ===
-find_path(MYSQL_INCLUDE_DIR mysql.h
-  HINTS ${MYSQL_INCLUDE_DIR} ENV MYSQL_INCLUDE_DIR /opt/homebrew/include /usr/local/include
-  PATH_SUFFIXES mysql mysqlclient
-)
-find_library(MYSQL_LIBRARY NAMES mysqlclient
-  HINTS ${MYSQL_LIBRARY} ENV MYSQL_LIBRARY /opt/homebrew/lib /usr/local/lib
-)
-
-if (NOT MYSQL_INCLUDE_DIR OR NOT MYSQL_LIBRARY)
-  message(FATAL_ERROR "MySQL client not found. Set -DMYSQL_INCLUDE_DIR and -DMYSQL_LIBRARY manually.")
-endif()
-include_directories(${MYSQL_INCLUDE_DIR})
-message(STATUS "Found MySQL: ${MYSQL_LIBRARY}")
-
 # === Source files ===
 file(GLOB_RECURSE SOURCES src/*.c)
 file(GLOB_RECURSE HEADERS include/*.h)
@@ -59,5 +44,4 @@ add_executable(lunet ${SOURCES} ${HEADERS})
 target_link_libraries(lunet
   ${LUAJIT_LIBRARY}
   ${LIBUV_LIBRARY}
-  ${MYSQL_LIBRARY}
 )

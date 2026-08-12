@@ -6,10 +6,10 @@
 
 #include "co.h"
 #include "fs.h"
-#include "mysql.h"
 #include "rt.h"
 #include "socket.h"
 #include "timer.h"
+#include "lunet_signal.h"
 
 // register core module
 int lunet_open_core(lua_State *L) {
@@ -50,16 +50,6 @@ int lunet_open_fs(lua_State *L) {
   return 1;
 }
 
-int lunet_open_mysql(lua_State *L) {
-  luaL_Reg funcs[] = {{"open", lunet_mysql_open},
-                      {"close", lunet_mysql_close},
-                      {"query", lunet_mysql_query},
-                      {"exec", lunet_mysql_exec},
-                      {NULL, NULL}};
-  luaL_newlib(L, funcs);
-  return 1;
-}
-
 // register modules
 void lunet_open(lua_State *L) {
   // register core module
@@ -85,12 +75,6 @@ void lunet_open(lua_State *L) {
   lua_getfield(L, -1, "preload");
   lua_pushcfunction(L, lunet_open_fs);
   lua_setfield(L, -2, "lunet.fs");
-  lua_pop(L, 2);
-  // register mysql module
-  lua_getglobal(L, "package");
-  lua_getfield(L, -1, "preload");
-  lua_pushcfunction(L, lunet_open_mysql);
-  lua_setfield(L, -2, "lunet.mysql");
   lua_pop(L, 2);
 }
 
