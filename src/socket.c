@@ -370,9 +370,9 @@ int lunet_socket_getpeername(lua_State *L) {
     lua_pushstring(L, "failed to get peer name");
     return 2;
   }
+  lua_pushstring(L, buf);
+  lua_pushinteger(L, ntohs(addr.sin_port));
 
-  lua_pushfstring(L, "%s:%d", buf, ntohs(addr.sin_port));
-  lua_pushnil(L);
   return 2;
 }
 
