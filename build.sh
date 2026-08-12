@@ -1,5 +1,6 @@
 #!/bin/bash
 
-mkdir build && cd build
+mkdir -p build && cd build
+cmake clean
 cmake ..
 make
