@@ -32,7 +32,7 @@ Lunet is a coroutine-based networking library that provides synchronous APIs wit
 - `sleep(ms)`: Suspend coroutine for specified milliseconds
 
 ### Socket Module (`lunet.socket`)
-- `listen(protocol, host, port)`: Create TCP server
+- `listen(protocol, host, port, is_reuse_port)`: Create TCP server
 - `accept(listener)`: Accept incoming connections
 - `connect(host, port)`: Connect to remote server
 - `read(client)`: Read data from socket

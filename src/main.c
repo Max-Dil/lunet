@@ -6,10 +6,10 @@
 
 #include "co.h"
 #include "fs.h"
+#include "lunet_signal.h"
 #include "rt.h"
 #include "socket.h"
 #include "timer.h"
-#include "lunet_signal.h"
 
 // register core module
 int lunet_open_core(lua_State *L) {

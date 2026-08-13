@@ -228,6 +228,9 @@ int lunet_socket_listen(lua_State *co) {
   const char *protocol = luaL_checkstring(co, 1);
   const char *host = luaL_checkstring(co, 2);
   int port = luaL_checkinteger(co, 3);
+
+  int reuse_port = lua_toboolean(co, 4);
+
   if (port < 1 || port > 65535) {
     lua_pushnil(co);
     lua_pushstring(co, "port must be between 1 and 65535");
@@ -238,6 +241,14 @@ int lunet_socket_listen(lua_State *co) {
     lua_pushstring(co, "only tcp is supported");
     return 2;
   }
+
+  struct sockaddr_in addr;
+  if (uv_ip4_addr(host, port, &addr) < 0) {
+    lua_pushnil(co);
+    lua_pushstring(co, "invalid host or port");
+    return 2;
+  }
+
   tcp_ctx_t *ctx = malloc(sizeof(tcp_ctx_t));
   if (!ctx) {
     lua_pushnil(co);
@@ -256,7 +267,7 @@ int lunet_socket_listen(lua_State *co) {
   }
 
   int ret = 0;
-  if ((ret = uv_tcp_init(uv_default_loop(), &ctx->handle)) < 0) {
+  if ((ret = uv_tcp_init_ex(uv_default_loop(), &ctx->handle, AF_INET)) < 0) {
     queue_destroy(ctx->server.pending_accepts);
     free(ctx);
     lua_pushnil(co);
@@ -266,28 +277,32 @@ int lunet_socket_listen(lua_State *co) {
 
   ctx->handle.data = ctx;
 
-  struct sockaddr_in addr;
-  if (uv_ip4_addr(host, port, &addr) < 0) {
-    queue_destroy(ctx->server.pending_accepts);
-    free(ctx);
-    lua_pushnil(co);
-    lua_pushstring(co, "invalid host or port");
-    return 2;
+  if (reuse_port) {
+    uv_os_fd_t fd;
+    if (uv_fileno((const uv_handle_t *)&ctx->handle, &fd) == 0) {
+#ifdef SO_REUSEPORT
+      int optval = 1;
+      setsockopt((int)fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#else
+      fprintf(stderr, "[lunet] warning: SO_REUSEPORT is not supported on this platform\n");
+#endif
+    }
   }
+
   if ((ret = uv_tcp_bind(&ctx->handle, (const struct sockaddr *)&addr, 0)) < 0) {
-    queue_destroy(ctx->server.pending_accepts);
-    free(ctx);
+    uv_close((uv_handle_t *)&ctx->handle, lunet_close_cb);
     lua_pushnil(co);
     lua_pushfstring(co, "failed to bind: %s", uv_strerror(ret));
     return 2;
   }
+
   if ((ret = uv_listen((uv_stream_t *)&ctx->handle, 128, lunet_listen_cb)) < 0) {
-    queue_destroy(ctx->server.pending_accepts);
-    free(ctx);
+    uv_close((uv_handle_t *)&ctx->handle, lunet_close_cb);
     lua_pushnil(co);
     lua_pushfstring(co, "failed to listen: %s", uv_strerror(ret));
     return 2;
   }
+
   lua_pushlightuserdata(co, ctx);
   lua_pushnil(co);
   return 2;
