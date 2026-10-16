@@ -9,6 +9,7 @@
 #include "fs.h"
 #include "lunet.h"
 #include "lunet_signal.h"
+#include "psql.h"
 #include "rt.h"
 #include "socket.h"
 #include "thread.h"
@@ -93,6 +94,7 @@ void lunet_open(lua_State *L) {
   register_module(L, "lunet.fs",      lunet_open_fs);
   register_module(L, "lunet.channel", lunet_open_channel);
   register_module(L, "lunet.thread",  lunet_open_thread);
+  register_module(L, "lunet.psql",    lunet_open_psql);
 }
 
 int main(int argc, char **argv) {

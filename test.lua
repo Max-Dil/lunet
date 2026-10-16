@@ -30,3 +30,33 @@ if th then
 else
     print(err)
 end
+
+-- local lunet = require("lunet")
+-- local psql = require("lunet.psql")
+
+-- local pool = assert(psql.pool({
+--     host = "127.0.0.1",
+--     port = 5432,
+--     dbname = "game",
+--     user = "game",
+--     password = "secret",
+--     max_conns = 16,
+-- }))
+
+-- assert(pool:prepare("player_by_id", "SELECT id, name, gold FROM players WHERE id = $1"))
+
+-- lunet.spawn(function()
+--     local rows, err = pool:execute("player_by_id", 42)
+--     if not rows then
+--         print("error:", err)
+--         return
+--     end
+--     print(rows[1] and rows[1].name)
+
+--     local conn = pool:acquire()
+--     conn:query("BEGIN")
+--     conn:query("UPDATE players SET gold = gold - $1 WHERE id = $2", 100, 42)
+--     conn:query("UPDATE players SET gold = gold + $1 WHERE id = $2", 100, 43)
+--     conn:query("COMMIT")
+--     conn:release()
+-- end)
