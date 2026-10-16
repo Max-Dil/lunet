@@ -18,7 +18,7 @@ static void lunet_fs_open_cb(uv_fs_t *req) {
   fs_ctx_t *ctx = (fs_ctx_t *)req->data;
   lua_State *L = ctx->L;
 
-  // resume coroutine
+  
   lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->co_ref);
   luaL_unref(L, LUA_REGISTRYINDEX, ctx->co_ref);
 
@@ -29,7 +29,7 @@ static void lunet_fs_open_cb(uv_fs_t *req) {
   }
 
   lua_State *co = lua_tothread(L, -1);
-  lua_pop(L, 1);  // pop coroutine
+  lua_pop(L, 1);  
 
   if (req->result >= 0) {
     lua_pushinteger(co, req->result);
@@ -46,7 +46,7 @@ cleanup:
   free(ctx);
 }
 
-// mode to uv_fs_open flags
+
 static int fs_mode_to_flags(const char *mode, size_t mode_len) {
   if (mode_len == 0) return -1;
 
@@ -54,48 +54,48 @@ static int fs_mode_to_flags(const char *mode, size_t mode_len) {
   bool has_plus = false;
   bool has_x = false;
 
-  // Check for '+' and 'x' modifiers first
+  
   for (size_t i = 0; i < mode_len; i++) {
     if (mode[i] == '+') has_plus = true;
     if (mode[i] == 'x') has_x = true;
   }
 
-  // Handle primary mode
+  
   switch (mode[0]) {
     case 'r':
       if (has_plus) {
-        flags = O_RDWR;  // r+ - read/write, file must exist
+        flags = O_RDWR;  
       } else {
-        flags = O_RDONLY;  // r - read only
+        flags = O_RDONLY;  
       }
       break;
 
     case 'w':
       if (has_plus) {
-        flags = O_RDWR | O_CREAT | O_TRUNC;  // w+ - read/write, create/truncate
+        flags = O_RDWR | O_CREAT | O_TRUNC;  
       } else {
-        flags = O_WRONLY | O_CREAT | O_TRUNC;  // w - write only, create/truncate
+        flags = O_WRONLY | O_CREAT | O_TRUNC;  
       }
       break;
 
     case 'a':
       if (has_plus) {
-        flags = O_RDWR | O_CREAT | O_APPEND;  // a+ - read/write, create/append
+        flags = O_RDWR | O_CREAT | O_APPEND;  
       } else {
-        flags = O_WRONLY | O_CREAT | O_APPEND;  // a - write only, create/append
+        flags = O_WRONLY | O_CREAT | O_APPEND;  
       }
       break;
 
     case 'x':
       if (has_plus) {
-        flags = O_RDWR | O_CREAT | O_EXCL;  // x+ - read/write, create new, fail if exists
+        flags = O_RDWR | O_CREAT | O_EXCL;  
       } else {
-        flags = O_WRONLY | O_CREAT | O_EXCL;  // x - write only, create new, fail if exists
+        flags = O_WRONLY | O_CREAT | O_EXCL;  
       }
       break;
 
     default:
-      return -1;  // Invalid mode
+      return -1;  
   }
 
   return flags;
@@ -155,7 +155,7 @@ static void lunet_fs_close_cb(uv_fs_t *req) {
   fs_close_ctx_t *ctx = (fs_close_ctx_t *)req->data;
   lua_State *L = ctx->L;
 
-  // resume coroutine
+  
   lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->co_ref);
   luaL_unref(L, LUA_REGISTRYINDEX, ctx->co_ref);
 
@@ -234,27 +234,27 @@ static void lunet_fs_stat_cb(uv_fs_t *req) {
   }
 
   lua_State *co = lua_tothread(L, -1);
-  lua_pop(L, 1);  // pop thread
+  lua_pop(L, 1);  
 
   if (req->result == 0) {
     uv_stat_t *s = &req->statbuf;
-    // lua_pushinteger(co, (lua_Integer)s->st_size);
-    // uint64_t st_dev;
-    // uint64_t st_mode;
-    // uint64_t st_nlink;
-    // uint64_t st_uid;
-    // uint64_t st_gid;
-    // uint64_t st_rdev;
-    // uint64_t st_ino;
-    // uint64_t st_size;
-    // uint64_t st_blksize;
-    // uint64_t st_blocks;
-    // uint64_t st_flags;
-    // uint64_t st_gen;
-    // uv_timespec_t st_atim;
-    // uv_timespec_t st_mtim;
-    // uv_timespec_t st_ctim;
-    // uv_timespec_t st_birthtim;、
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     lua_newtable(co);
     lua_pushinteger(co, (lua_Integer)s->st_dev);
     lua_setfield(co, -2, "dev");

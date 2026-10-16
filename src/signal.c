@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <uv.h>
+#include <string.h>
 
 #include "co.h"
 #include "lunet_signal.h"
@@ -19,7 +20,7 @@ static void lunet_signal_cb(uv_signal_t *handle, int signo) {
   lua_State *co = ctx->L;
 
   lua_rawgeti(co, LUA_REGISTRYINDEX, ctx->co_ref);
-  // convert signal number to string
+  
   if (signo == SIGINT)
     lua_pushstring(co, "INT");
   else if (signo == SIGTERM)
@@ -40,7 +41,7 @@ static void lunet_signal_cb(uv_signal_t *handle, int signo) {
     }
   }
 
-  // cleanup
+  
   luaL_unref(co, LUA_REGISTRYINDEX, ctx->co_ref);
   uv_signal_stop(&ctx->handle);
   uv_close((uv_handle_t *)&ctx->handle, (uv_close_cb)free);
@@ -53,7 +54,7 @@ int lunet_signal_wait(lua_State *L) {
 
   const char *sig_name = luaL_checkstring(L, 1);
 
-  // covert string to signal number
+  
   int signo = SIGINT;
   if (strcmp(sig_name, "INT") == 0)
     signo = SIGINT;
