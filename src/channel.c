@@ -10,8 +10,6 @@
 #include "co.h"
 #include "rt.h"
 
-
-
 msg_t *lunet_msg_from_lua(lua_State *L, int idx) {
   msg_t *m = calloc(1, sizeof(*m));
   if (!m) return NULL;
@@ -72,19 +70,17 @@ void lunet_msg_free(msg_t *m) {
   free(m);
 }
 
-
-
 typedef struct waiter_s {
-  lunet_rt_t *rt;        
-  int co_ref;            
-  struct message_s *msg; 
-  const char *err;       
+  lunet_rt_t *rt;
+  int co_ref;
+  struct message_s *msg;
+  const char *err;
   struct waiter_s *next;
 } waiter_t;
 
 typedef struct message_s {
   msg_t msg;
-  waiter_t *ack;         
+  waiter_t *ack;
   struct message_s *next;
 } message_t;
 
@@ -93,11 +89,23 @@ typedef struct channel_s {
   uv_mutex_t mutex;
   int closed;
   int registered;
-  message_t *mhead, *mtail;   
-  waiter_t *whead, *wtail;    
+  message_t *mhead, *mtail;
+  waiter_t *whead, *wtail;
   struct channel_s *reg_next;
 } channel_t;
 
+#define CHAN_MT "lunet.channel.handle"
+
+typedef struct {
+  channel_t *ch;
+} chan_handle_t;
+
+static void push_chan(lua_State *L, channel_t *ch) {
+  chan_handle_t *h = (chan_handle_t *)lua_newuserdata(L, sizeof(*h));
+  h->ch = ch;
+  luaL_newmetatable(L, CHAN_MT);
+  lua_setmetatable(L, -2);
+}
 
 static uv_once_t g_reg_once = UV_ONCE_INIT;
 static uv_mutex_t g_reg_mutex;
@@ -139,13 +147,10 @@ static waiter_t *waiter_new(lunet_rt_t *rt, lua_State *co) {
   return w;
 }
 
-
 static void waiter_discard(waiter_t *w) {
   luaL_unref(lunet_rt_L(w->rt), LUA_REGISTRYINDEX, w->co_ref);
   free(w);
 }
-
-
 
 static void resume_ack(lunet_rt_t *rt, void *arg) {
   waiter_t *w = (waiter_t *)arg;
@@ -177,8 +182,6 @@ static void resume_recv(lunet_rt_t *rt, void *arg) {
   if (w->msg) {
     message_t *m = w->msg;
     w->msg = NULL;
-    
-    
     if (m->ack) {
       waiter_t *a = m->ack;
       m->ack = NULL;
@@ -193,14 +196,11 @@ static void resume_recv(lunet_rt_t *rt, void *arg) {
   free(w);
 }
 
-
-
 static void post_recv(waiter_t *w) {
   if (lunet_rt_post(w->rt, resume_recv, w) != 0) {
     fprintf(stderr, "[lunet] channel: failed to wake receiver\n");
   }
 }
-
 
 static void message_ack(message_t *m, const char *err) {
   waiter_t *w = m->ack;
@@ -211,8 +211,6 @@ static void message_ack(message_t *m, const char *err) {
     fprintf(stderr, "[lunet] channel: failed to wake supplier\n");
   }
 }
-
-
 
 static void mq_push(channel_t *ch, message_t *m) {
   m->next = NULL;
@@ -255,7 +253,8 @@ static void drain_messages(channel_t *ch, const char *err) {
 }
 
 static channel_t *channel_arg(lua_State *L, int idx) {
-  return (channel_t *)lua_touserdata(L, idx);
+  chan_handle_t *h = (chan_handle_t *)luaL_testudata(L, idx, CHAN_MT);
+  return h ? h->ch : NULL;
 }
 
 static channel_t *channel_new(const char *name) {
@@ -287,8 +286,6 @@ static void unregister(channel_t *ch) {
   uv_mutex_unlock(&g_reg_mutex);
 }
 
-
-
 int lunet_channel_create(lua_State *L) {
   const char *name = luaL_checkstring(L, 1);
   uv_once(&g_reg_once, reg_init);
@@ -316,7 +313,7 @@ int lunet_channel_create(lua_State *L) {
     lua_pushstring(L, "out of memory");
     return 2;
   }
-  lua_pushlightuserdata(L, ch);
+  push_chan(L, ch);
   return 1;
 }
 
@@ -335,13 +332,13 @@ int lunet_channel_close(lua_State *L) {
   }
   ch->closed = 1;
   drain_messages(ch, "channel closed");
-  waiter_t *w = ch->whead;  
+  waiter_t *w = ch->whead;
   ch->whead = ch->wtail = NULL;
   uv_mutex_unlock(&ch->mutex);
 
   while (w) {
     waiter_t *next = w->next;
-    w->msg = NULL;  
+    w->msg = NULL;
     post_recv(w);
     w = next;
   }
@@ -388,7 +385,7 @@ int lunet_channel_push(lua_State *L) {
   }
   waiter_t *w = wq_pop(ch);
   if (w) {
-    w->msg = m;  
+    w->msg = m;
   } else {
     mq_push(ch, m);
   }
@@ -438,7 +435,6 @@ int lunet_channel_demand(lua_State *L) {
   lunet_rt_t *rt = lunet_rt_current();
   if (!rt) return luaL_error(L, "channel.demand: no runtime in this thread");
 
-  
   waiter_t *w = waiter_new(rt, L);
   if (!w) {
     lua_pushnil(L);
@@ -459,11 +455,11 @@ int lunet_channel_demand(lua_State *L) {
     wq_push(ch, w);
     lunet_rt_wait_begin(rt);
     uv_mutex_unlock(&ch->mutex);
-    return lua_yield(L, 0);  
+    return lua_yield(L, 0);
   }
   uv_mutex_unlock(&ch->mutex);
 
-  waiter_discard(w);  
+  waiter_discard(w);
   lunet_msg_to_lua(L, &m->msg);
   lua_pushnil(L);
   message_ack(m, NULL);
@@ -510,10 +506,10 @@ int lunet_channel_supply(lua_State *L) {
   } else {
     mq_push(ch, m);
   }
-  lunet_rt_wait_begin(rt);  
+  lunet_rt_wait_begin(rt);
   uv_mutex_unlock(&ch->mutex);
 
   if (w) post_recv(w);
 
-  return lua_yield(L, 0);  
+  return lua_yield(L, 0);
 }

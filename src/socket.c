@@ -12,8 +12,10 @@
 #include <uv.h>
 
 #include "co.h"
-#include "rt.h"  
+#include "rt.h"
 #include "stl.h"
+
+#define SOCK_MT "lunet.socket.handle"
 
 static size_t read_buffer_size = 4096;
 
@@ -25,36 +27,75 @@ typedef enum {
 typedef struct {
   uv_tcp_t handle;
   tcp_type_t type;
-  int closed;  
+  int closed;
   union {
     struct {
       int accept_ref;
       queue_t *pending_accepts;
     } server;
     struct {
-      int read_ref;            
-      int read_cb_ref;         
-      uv_timer_t *read_timer;  
+      int read_ref;
+      int read_cb_ref;
+      uv_timer_t *read_timer;
     } client;
   };
 } tcp_ctx_t;
 
 typedef struct {
+  tcp_ctx_t *ctx;
+} sock_handle_t;
+
+typedef struct {
   uv_write_t req;
   tcp_ctx_t *ctx;
   char *data;
-  int co_ref;  
-  int cb_ref;  
+  int co_ref;
+  int cb_ref;
 } write_req_t;
+
+typedef struct {
+  uv_connect_t req;
+  tcp_ctx_t *ctx;
+  int co_ref;
+} connect_ctx_t;
+
+static void push_sock(lua_State *L, tcp_ctx_t *ctx) {
+  sock_handle_t *h = (sock_handle_t *)lua_newuserdata(L, sizeof(*h));
+  h->ctx = ctx;
+  luaL_newmetatable(L, SOCK_MT);
+  lua_setmetatable(L, -2);
+}
+
+static tcp_ctx_t *sock_arg(lua_State *L, int idx, int want, const char **err) {
+  sock_handle_t *h = (sock_handle_t *)luaL_testudata(L, idx, SOCK_MT);
+  if (!h) {
+    *err = "invalid socket handle";
+    return NULL;
+  }
+  tcp_ctx_t *ctx = h->ctx;
+  if (!ctx || ctx->closed) {
+    *err = "socket closed";
+    return NULL;
+  }
+  if (want >= 0 && ctx->type != want) {
+    *err = (want == TCP_SERVER) ? "invalid listener handle" : "invalid client socket handle";
+    return NULL;
+  }
+  return ctx;
+}
 
 static void lunet_close_cb(uv_handle_t *handle) {
   tcp_ctx_t *ctx = (tcp_ctx_t *)handle->data;
-  if (ctx) {
-    if (ctx->type == TCP_SERVER) {
-      queue_destroy(ctx->server.pending_accepts);
+  if (!ctx) return;
+  if (ctx->type == TCP_SERVER) {
+    queue_t *q = ctx->server.pending_accepts;
+    while (!queue_is_empty(q)) {
+      tcp_ctx_t *c = (tcp_ctx_t *)queue_dequeue(q);
+      uv_close((uv_handle_t *)&c->handle, lunet_close_cb);
     }
-    free(ctx);
+    queue_destroy(q);
   }
+  free(ctx);
 }
 
 static void lunet_timer_close_cb(uv_handle_t *handle) { free(handle); }
@@ -84,7 +125,7 @@ static void push_read_result(lua_State *L, const char *data, size_t len, const c
     if (err) {
       lua_pushstring(L, err);
     } else {
-      lua_pushnil(L);  
+      lua_pushnil(L);
     }
   }
 }
@@ -114,7 +155,7 @@ static void lunet_write_cb(uv_write_t *req, int status) {
       }
       resume_waiter(waiting_co, 1, "write_cb");
     }
-    lua_pop(L, 1);  
+    lua_pop(L, 1);
   }
 
   free(wr->data);
@@ -122,6 +163,8 @@ static void lunet_write_cb(uv_write_t *req, int status) {
 }
 
 static void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+  (void)handle;
+  (void)suggested_size;
   buf->base = malloc(read_buffer_size);
   buf->len = buf->base ? read_buffer_size : 0;
 }
@@ -165,7 +208,7 @@ static void lunet_read_timeout_cb(uv_timer_t *timer) {
 static void lunet_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   tcp_ctx_t *ctx = (tcp_ctx_t *)stream->data;
 
-  if (nread == 0) {  
+  if (nread == 0) {
     free(buf->base);
     return;
   }
@@ -191,11 +234,11 @@ static void lunet_accept_wake(tcp_ctx_t *ctx, tcp_ctx_t *client_ctx, const char 
   if (lua_isthread(L, -1)) {
     lua_State *waiting_co = lua_tothread(L, -1);
     if (client_ctx) {
-      lua_pushlightuserdata(waiting_co, client_ctx);
+      push_sock(waiting_co, client_ctx);
       lua_pushnil(waiting_co);
     } else {
       lua_pushnil(waiting_co);
-      lua_pushstring(waiting_co, err);
+      lua_pushstring(waiting_co, err ? err : "accept failed");
     }
     resume_waiter(waiting_co, 2, "listen_cb");
   }
@@ -214,7 +257,7 @@ static void lunet_listen_cb(uv_stream_t *server, int status) {
 
   tcp_ctx_t *client_ctx = malloc(sizeof(tcp_ctx_t));
   if (!client_ctx) {
-    return;  
+    return;
   }
 
   client_ctx->type = TCP_CLIENT;
@@ -326,7 +369,7 @@ int lunet_socket_listen(lua_State *co) {
     return 2;
   }
 
-  lua_pushlightuserdata(co, ctx);
+  push_sock(co, ctx);
   lua_pushnil(co);
   return 2;
 }
@@ -336,16 +379,11 @@ int lunet_socket_accept(lua_State *co) {
     return lua_error(co);
   }
 
-  if (!lua_islightuserdata(co, 1)) {
+  const char *err = NULL;
+  tcp_ctx_t *listener_ctx = sock_arg(co, 1, TCP_SERVER, &err);
+  if (!listener_ctx) {
     lua_pushnil(co);
-    lua_pushstring(co, "invalid listener handle");
-    return 2;
-  }
-
-  tcp_ctx_t *listener_ctx = (tcp_ctx_t *)lua_touserdata(co, 1);
-  if (!listener_ctx || listener_ctx->type != TCP_SERVER) {
-    lua_pushnil(co);
-    lua_pushstring(co, "invalid listener handle");
+    lua_pushstring(co, err);
     return 2;
   }
 
@@ -358,7 +396,7 @@ int lunet_socket_accept(lua_State *co) {
   if (!queue_is_empty(listener_ctx->server.pending_accepts)) {
     tcp_ctx_t *client_ctx = (tcp_ctx_t *)queue_dequeue(listener_ctx->server.pending_accepts);
     if (client_ctx) {
-      lua_pushlightuserdata(co, client_ctx);
+      push_sock(co, client_ctx);
       lua_pushnil(co);
       return 2;
     }
@@ -375,16 +413,11 @@ int lunet_socket_getpeername(lua_State *L) {
     return lua_error(L);
   }
 
-  if (!lua_islightuserdata(L, 1)) {
-    lua_pushnil(L);
-    lua_pushstring(L, "invalid socket handle");
-    return 2;
-  }
-
-  tcp_ctx_t *ctx = (tcp_ctx_t *)lua_touserdata(L, 1);
+  const char *err = NULL;
+  tcp_ctx_t *ctx = sock_arg(L, 1, TCP_CLIENT, &err);
   if (!ctx) {
     lua_pushnil(L);
-    lua_pushstring(L, "invalid socket handle");
+    lua_pushstring(L, err);
     return 2;
   }
 
@@ -410,21 +443,19 @@ int lunet_socket_getpeername(lua_State *L) {
 }
 
 int lunet_socket_close(lua_State *L) {
-  if (!lua_islightuserdata(L, 1)) {
+  sock_handle_t *h = (sock_handle_t *)luaL_testudata(L, 1, SOCK_MT);
+  if (!h) {
     lua_pushstring(L, "invalid socket handle");
     return 1;
   }
 
-  tcp_ctx_t *ctx = (tcp_ctx_t *)lua_touserdata(L, 1);
-  if (!ctx) {
-    lua_pushstring(L, "invalid socket handle");
-    return 1;
-  }
-
-  if (ctx->closed) {
+  tcp_ctx_t *ctx = h->ctx;
+  if (!ctx || ctx->closed) {
     lua_pushstring(L, "socket already closed");
     return 1;
   }
+
+  h->ctx = NULL;
   ctx->closed = 1;
 
   if (ctx->type == TCP_CLIENT) {
@@ -432,6 +463,10 @@ int lunet_socket_close(lua_State *L) {
     if (ctx->client.read_timer) {
       uv_close((uv_handle_t *)ctx->client.read_timer, lunet_timer_close_cb);
       ctx->client.read_timer = NULL;
+    }
+  } else {
+    if (ctx->server.accept_ref != LUA_NOREF) {
+      lunet_accept_wake(ctx, NULL, "socket closed");
     }
   }
 
@@ -452,25 +487,15 @@ int lunet_socket_read(lua_State *L) {
     return lua_error(L);
   }
 
-  if (!lua_islightuserdata(L, 1)) {
+  const char *err = NULL;
+  tcp_ctx_t *ctx = sock_arg(L, 1, TCP_CLIENT, &err);
+  if (!ctx) {
     lua_pushnil(L);
-    lua_pushstring(L, "invalid socket handle");
+    lua_pushstring(L, err);
     return 2;
   }
 
-  tcp_ctx_t *ctx = (tcp_ctx_t *)lua_touserdata(L, 1);
-  if (!ctx || ctx->type != TCP_CLIENT) {
-    lua_pushnil(L);
-    lua_pushstring(L, "invalid client socket handle");
-    return 2;
-  }
-  if (ctx->closed) {
-    lua_pushnil(L);
-    lua_pushstring(L, "socket closed");
-    return 2;
-  }
-
-  lua_Integer timeout = 0;  
+  lua_Integer timeout = 0;
   if (!lua_isnoneornil(L, 2)) {
     if (!lua_isnumber(L, 2) || lua_tointeger(L, 2) < 0) {
       lua_pushnil(L);
@@ -542,23 +567,15 @@ int lunet_socket_write(lua_State *L) {
     return lua_error(L);
   }
 
-  if (!lua_islightuserdata(L, 1)) {
-    lua_pushstring(L, "invalid socket handle");
+  const char *err = NULL;
+  tcp_ctx_t *ctx = sock_arg(L, 1, TCP_CLIENT, &err);
+  if (!ctx) {
+    lua_pushstring(L, err);
     return 1;
   }
 
   if (!lua_isstring(L, 2)) {
     lua_pushstring(L, "data must be a string");
-    return 1;
-  }
-
-  tcp_ctx_t *ctx = (tcp_ctx_t *)lua_touserdata(L, 1);
-  if (!ctx || ctx->type != TCP_CLIENT) {
-    lua_pushstring(L, "invalid client socket handle");
-    return 1;
-  }
-  if (ctx->closed) {
-    lua_pushstring(L, "socket closed");
     return 1;
   }
 
@@ -606,12 +623,6 @@ int lunet_socket_write(lua_State *L) {
   return 1;
 }
 
-typedef struct {
-  uv_connect_t req;
-  tcp_ctx_t *ctx;
-  int co_ref;
-} connect_ctx_t;
-
 static void lunet_connect_cb(uv_connect_t *req, int status) {
   connect_ctx_t *cctx = (connect_ctx_t *)req->data;
   lua_State *L = default_luaL();
@@ -623,7 +634,7 @@ static void lunet_connect_cb(uv_connect_t *req, int status) {
   if (lua_isthread(L, -1)) {
     lua_State *waiting_co = lua_tothread(L, -1);
     if (status == 0) {
-      lua_pushlightuserdata(waiting_co, cctx->ctx);
+      push_sock(waiting_co, cctx->ctx);
       lua_pushnil(waiting_co);
     } else {
       lua_pushnil(waiting_co);
