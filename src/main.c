@@ -14,6 +14,7 @@
 #include "socket.h"
 #include "thread.h"
 #include "timer.h"
+#include <signal.h>
 
 int lunet_open_channel(lua_State *L) {
   luaL_Reg funcs[] = {
@@ -98,6 +99,8 @@ void lunet_open(lua_State *L) {
 }
 
 int main(int argc, char **argv) {
+  signal(SIGPIPE, SIG_IGN);
+
   if (argc != 2) {
     fprintf(stderr, "Usage: %s <lua_file>\n", argv[0]);
     return 1;
